@@ -1,0 +1,58 @@
+:root { color-scheme: light dark;
+ font: 15px/1.5 system-ui, sans-serif; }
+
+body { margin: 0;
+ background: light-dark(#f4f6fa, #171a20);
+ color: light-dark(#192231, #e1e6ef); }
+
+main { max-width: 980px;
+ margin: 40px auto;
+ padding: 0 24px; }
+
+h1 { font-size: 30px;
+ margin-bottom: 8px; }
+
+ h2 { font-size: 20px; }
+
+section { background: light-dark(white, #242a34);
+ border: 1px solid light-dark(#dce2eb,#3d4755);
+ border-radius: 14px;
+ padding: 22px;
+ margin: 24px 0; }
+
+label { display: flex;
+ align-items: center;
+ gap: 12px;
+ margin: 16px 0; }
+
+select { margin-left: auto;
+ min-width: 275px; }
+
+ select,
+button { font: inherit;
+ padding: 8px 12px;
+ border-radius: 6px; }
+
+input[type=range] { flex: 1;
+ max-width: 400px; }
+
+ input[type=checkbox] { width: 18px;
+ height: 18px; }
+
+.master { font-weight: 650; }
+
+ .master span,
+.scope { font-size: 13px;
+ opacity: .8; }
+
+article { padding: 16px 0;
+ border-top: 1px solid #758298; }
+
+ article h3 { margin: 0 0 8px; }
+
+article p { margin: 5px 0; }
+
+ #ack { margin-bottom: 0; }
+
+ button { cursor: pointer; }
+@media (max-width: 600px) { label { flex-wrap: wrap; } select { width: 100%; } }

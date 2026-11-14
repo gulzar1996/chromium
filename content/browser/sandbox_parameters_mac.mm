@@ -134,7 +134,13 @@ void SetupCommonSandboxParameters(
 #if defined(COMPONENT_BUILD)
   // For component builds, allow access to one directory level higher, where
   // the dylibs live.
-  base::FilePath component_path = base::apple::MainBundlePath().Append("..");
+  const base::FilePath executable_bundle =
+      base::apple::GetInnermostAppBundlePath(
+          browser_command_line->GetProgram());
+  base::FilePath component_path =
+      executable_bundle.empty() ? base::apple::MainBundlePath().Append(
+                                      "..")  // Unbundled test executables.
+                                : executable_bundle.DirName();
   std::string component_path_canonical =
       sandbox::policy::GetCanonicalPath(component_path).value();
   CHECK(serializer->SetParameter(sandbox::policy::kParamComponentPath,

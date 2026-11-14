@@ -807,3 +807,21 @@ if (is_win || use_vaapi) {
     ]
   }
 }
+
+# Focused deterministic tests for the live Mac processing queue. Apple API
+# output quality is covered separately by chromium/tests/video_effects_smoke.mm.
+if (is_mac) {
+  test("video_effects_unittests") {
+    sources = [ "mac/mac_video_effects_pipeline_unittest.cc" ]
+    deps = [
+      ":gpu",
+      "//base/test:run_all_unittests",
+      "//base/test:test_support",
+      "//testing/gtest",
+    ]
+    frameworks = [
+      "CoreVideo.framework",
+      "CoreMedia.framework",
+    ]
+  }
+}

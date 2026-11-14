@@ -251,9 +251,6 @@ GpuTerminationStatus ConvertToGpuTerminationStatus(
 
 // Command-line switches to propagate to the GPU process.
 static const char* const kSwitchNames[] = {
-#if BUILDFLAG(IS_MAC)
-    "mac-video-upscaler",
-#endif
     sandbox::policy::switches::kDisableSeccompFilterSandbox,
     sandbox::policy::switches::kGpuSandboxAllowSysVShm,
     sandbox::policy::switches::kGpuSandboxFailuresFatal,

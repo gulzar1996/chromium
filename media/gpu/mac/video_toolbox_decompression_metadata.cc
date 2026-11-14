@@ -7,6 +7,8 @@
 namespace media {
 
 VideoToolboxDecodeMetadata::VideoToolboxDecodeMetadata() = default;
+VideoToolboxDecodeMetadata::VideoToolboxDecodeMetadata(
+    const VideoToolboxDecodeMetadata&) = default;
 
 VideoToolboxDecodeMetadata::~VideoToolboxDecodeMetadata() = default;
 

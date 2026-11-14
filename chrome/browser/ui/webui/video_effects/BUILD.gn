@@ -1,0 +1,20 @@
+source_set("video_effects") {
+  sources = [
+    "video_effects_service.cc",
+    "video_effects_service.h",
+    "video_effects_ui.cc",
+    "video_effects_ui.h",
+  ]
+  public_deps = [
+    "//content/public/browser",
+    "//media/mojo/mojom/video_effects:mojom",
+    "//mojo/public/cpp/bindings",
+    "//ui/webui",
+  ]
+  deps = [
+    "//base",
+    "//chrome/browser:browser_process",
+    "//chrome/browser/resources/video_effects:resources",
+    "//components/prefs",
+  ]
+}

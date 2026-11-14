@@ -9,6 +9,9 @@
 #include "build/build_config.h"
 #include "chrome/gpu/chrome_content_gpu_client.h"
 #include "media/media_buildflags.h"
+#if BUILDFLAG(IS_MAC)
+#include "media/gpu/mac/mac_video_effects_service.h"
+#endif
 #include "mojo/public/cpp/bindings/binder_map.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
@@ -73,8 +76,9 @@ void CreateArcVideoProtectedBufferAllocator(
   auto gpu_arc_video_protected_buffer_allocator =
       arc::GpuArcVideoProtectedBufferAllocator::Create(
           client->GetProtectedBufferManager());
-  if (!gpu_arc_video_protected_buffer_allocator)
+  if (!gpu_arc_video_protected_buffer_allocator) {
     return;
+  }
   mojo::MakeSelfOwnedReceiver(
       std::move(gpu_arc_video_protected_buffer_allocator), std::move(receiver));
 }
@@ -98,6 +102,11 @@ void ExposeChromeGpuInterfacesToBrowser(
     const gpu::GpuPreferences& gpu_preferences,
     const gpu::GpuDriverBugWorkarounds& gpu_workarounds,
     mojo::BinderMap* binders) {
+#if BUILDFLAG(IS_MAC)
+  binders->Add<video_effects::mojom::GpuService>(
+      base::BindRepeating(&media::MacVideoEffectsService::Bind),
+      base::SingleThreadTaskRunner::GetCurrentDefault());
+#endif
 #if BUILDFLAG(IS_CHROMEOS) && BUILDFLAG(USE_LINUX_VIDEO_ACCELERATION)
   binders->Add<::arc::mojom::VideoDecodeAccelerator>(
       base::BindRepeating(&CreateArcVideoDecodeAccelerator, client,

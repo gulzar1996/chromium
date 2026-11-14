@@ -40,6 +40,7 @@ struct MEDIA_GPU_EXPORT VideoToolboxDecompressionSessionMetadata {
 // Metadata used when decoding a frame.
 struct MEDIA_GPU_EXPORT VideoToolboxDecodeMetadata {
   VideoToolboxDecodeMetadata();
+  VideoToolboxDecodeMetadata(const VideoToolboxDecodeMetadata&);
   ~VideoToolboxDecodeMetadata();
 
   scoped_refptr<CodecPicture> picture;

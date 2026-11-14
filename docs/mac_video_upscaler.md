@@ -1,21 +1,30 @@
-# Native Mac video upscaling
+# Live Mac video effects
 
-This experimental fork adds two selectable 2× video enhancement backends:
+This experimental Chromium fork adds `chrome://video-effects/` for live video
+upscaling across tabs. Enable effects and choose VideoToolbox low-latency 2× or
+MetalFX 2×. The master toggle bypasses all effects without losing saved choices.
+Motion processing, output frame rate, and temporal noise filtering controls,
+including filtering strength, are hidden in this release. Their saved settings
+and underlying processing remain available internally.
 
-- VideoToolbox low-latency super resolution (`VTFrameProcessor`).
-- MetalFX spatial scaling (`MTLFXSpatialScaler`).
+## Install
 
-Processing runs after VideoToolbox decoding on a dedicated sequenced worker.
-Enhanced IOSurfaces feed Chromium's existing shared-image converter and compositor.
-Intrinsic video dimensions and timestamps remain unchanged, preserving page layout.
-Unsupported inputs use the original decoded frame.
+Download the Apple silicon DMG from this repository's GitHub Releases, open it,
+and drag `Chromium.app` to Applications. Requires macOS 26 or later. Open
+`chrome://video-effects/` beside a supported video. Fresh profiles start with
+effects disabled.
+
+The app is ad-hoc signed, **not notarized by Apple**. macOS may require explicit
+approval in System Settings → Privacy & Security. No automatic updates are
+configured. It uses the standard Chromium profile, so back up an existing
+Chromium profile before using this experimental build. Third-party license
+notices are included at `chrome://credits/`.
 
 ## Build
 
-The tested configuration requires Apple silicon, macOS 26+, and full Xcode with a
-macOS 26 SDK. The development machine used M4 Pro, macOS 26.4 and Xcode 26.3.
-Follow [Chromium's macOS prerequisites](mac_build_instructions.md), including
-installing `depot_tools` on PATH. Start in a new empty checkout directory:
+Requires Apple silicon, macOS 26+, full Xcode, and `depot_tools` on PATH.
+Follow [Chromium's macOS prerequisites](mac_build_instructions.md).
+From a new checkout directory:
 
 ```sh
 gclient config https://github.com/gulzar1996/chromium.git
@@ -25,102 +34,68 @@ mkdir -p out/Upscale
 cp tools/mac_video_upscaler/args.gn out/Upscale/args.gn
 gn gen out/Upscale
 autoninja -C out/Upscale -j 8 chrome
+out/Upscale/Chromium.app/Contents/MacOS/Chromium --user-data-dir="$PWD/out/video-effects-profile" chrome://video-effects/
 ```
 
-If local Git configuration enables LFS, its helper must be installed; upstream
-LFS test fixtures are not needed for the `chrome` target. The base revision is
-`76224fa6bd643dc793378bd1f2df4d4797e0b390`. The provided GN configuration uses
-an arm64 release component build with H.264 enabled. Keep the output directory
-intact because the app depends on the accompanying component libraries.
+The Chromium base is `76224fa6bd643dc793378bd1f2df4d4797e0b390`.
+The configuration uses an arm64 release component build with H.264 enabled.
+Keep the output directory intact for development; the installer packages the
+required libraries inside the app so that the installed copy is self-contained.
 
-## Select a backend
+## Package
+
+Python 3.11+ and the built Chromium app are required:
 
 ```sh
-out/Upscale/Chromium.app/Contents/MacOS/Chromium \
-  --user-data-dir="$PWD/out/Upscale/upscaler-profile" \
-  'chrome://flags/#mac-video-upscaler'
+python3 tools/mac_video_upscaler/package-chromium.py --build-dir out/Upscale --output-dir out/releases --version 0.1.0
 ```
 
-Choose **Off**, **VideoToolbox low-latency super resolution (2x)** or
-**MetalFX spatial scaling (2x)** and relaunch. Alternatively, pass
-`--mac-video-upscaler=off`, `--mac-video-upscaler=videotoolbox` or
-`--mac-video-upscaler=metalfx`. Use a separate browser profile for comparisons.
+The packager follows the app and helper library dependencies, adds relative
+in-bundle links for standalone helpers, preserves entitlements, ad-hoc signs
+nested code and bundles, and verifies the signatures. It produces a compressed
+DMG with an Applications shortcut, installation notes, Chromium's license, and a
+separate SHA-256 checksum. It does not notarize the app.
 
-The first supported frame can take longer while Apple initializes its processor.
-This implementation enhances eligible frames regardless of the player display size.
+## Processing and scope
 
-## Verify actual compositor frames
+Supported inputs are uncropped, even-sized, 8-bit SDR video up to 1920×1080
+from the VideoToolbox decoder. Unsupported configurations pass through. Software
+decoding, protected content, and HDR enhancement are outside this scope. Runtime
+support depends on Apple's configuration checks; on the development M4 Pro,
+VideoToolbox 2× accepts 640×360 and 854×480 but rejects 1920×1080, while MetalFX
+supports 1080p → 4K.
 
-Open `chrome://media-internals` and inspect the playing video. Its decoder should
-remain `VideoToolboxVideoDecoder`, with an active backend message and no subsequent
-decoder fallback. An active message alone only proves processing succeeded once.
+The page reports requested and active effects, input/output dimensions, source
+FPS, processed FPS, processing time, queue depth, applied settings versions, and
+fallback reasons. Processed FPS describes worker output, not display presentation.
+Chromium can suspend background videos.
 
-While the video plays, run this in that page's DevTools Console:
+Decoded pictures are reordered before processing. The pipeline is temporal noise
+filtering → motion processing → upscaling → IOSurface conversion → Chromium's
+normal playback scheduler. Low-latency interpolation inserts midpoints; quality
+conversion supports 2× source or fixed 60/120 FPS grids. Seeks and discontinuities
+clear temporal history. Replacement sessions prepare asynchronously while video
+continues; overload bypasses enhancement and retries later. Retry bypassed effects
+requests immediate recovery. Settings persist in Local State and are restored
+following GPU reconnection. The retired `chrome://flags/#mac-video-upscaler` choice
+is migrated once when no new settings exist.
 
-```js
-document.querySelector('video').requestVideoFrameCallback((_, frame) => {
-  console.table({
-    compositorSize: `${frame.width}x${frame.height}`,
-    submittedFrames: frame.presentedFrames,
-    videoTime: frame.mediaTime,
-  });
-});
-```
+## Validate
 
-Repeat to verify the frame count and timestamp advance. For a supported 854×480
-source, Off reports 854×480 and either upscaler reports 1708×960. The page's
-`videoWidth`/`videoHeight` intentionally remain 854×480. In this revision, callback
-width and height come from the compositor's current frame visible rectangle.
-This is evidence of submission to composition, not physical display scanout.
-
-## Validation scripts
+Node 22+ and FFmpeg are required for browser validation:
 
 ```sh
 ./tools/mac_video_upscaler/test-native.sh
-node tools/mac_video_upscaler/browser-smoke.mjs
-node tools/mac_video_upscaler/youtube-compare.mjs
-node tools/mac_video_upscaler/render-youtube-report.mjs
-open out/Upscale/upscaler-tests/youtube-comparison/comparison.html
+./tools/mac_video_upscaler/test-video-effects.sh
+CHROMIUM_BINARY="$PWD/out/Upscale/Chromium.app/Contents/MacOS/Chromium" node tools/mac_video_upscaler/video-effects-browser.mjs
+# Add --headed for fullscreen and picture-in-picture checks.
+autoninja -C out/Upscale -j 8 video_effects_unittests
+out/Upscale/video_effects_unittests
 ```
 
-The browser scripts need Node 22+; the local browser smoke test also needs FFmpeg.
-They use isolated headless profiles with the normal GPU sandbox enabled.
-
-- Native checks exercise both real Apple APIs, output dimensions and IOSurface
-  backing, orientation, color channels, NV12 input, HDR passthrough, resolution
-  changes and backward timestamps. MetalFX 1080p→4K output is covered.
-- The local H.264 test checks the flags selector, backend activation, 640×360
-  intrinsic dimensions, compositor dimensions (1280×720 with enhancement),
-  seeking, GPU crashes and decoder fallback.
-- The live YouTube comparison targets `x22TJMv2RYo` at 480p, capturing exact
-  timestamps 00:30 and 00:45. It checks source format and dimensions as well as
-  compositor dimensions, rejecting cached 360p frames after quality changes.
-  The offline viewer includes an A/B divider and detail crops.
-
-The development build passed the native and local browser checks. The live
-YouTube comparison verified both upscalers at 854×480→1708×960, with about 30
-submitted frames/second and zero dropped frames in individual 10-second windows.
-These short samples do not establish sustained performance, energy use or
-motion/temporal quality. Seeking to 01:00 encountered a YouTube player error even
-with enhancement Off; arbitrary seeking and full-length playback are unverified.
-
-## Limits
-
-Only uncropped, even-sized, 8-bit SDR frames up to 1920×1080 decoded through
-VideoToolbox are eligible. HDR, other formats, crops and larger inputs pass
-through. VideoToolbox additionally checks Apple's supported dimensions and scale
-factors at runtime: on the development M4 Pro, 640×360 and 854×480 work, while
-1920×1080 is rejected by the low-latency scaler. MetalFX supports 1080p→4K.
-
-Processing failures return the original frame and report a status message. A
-failed backend is retried when input dimensions change. Decoder backpressure
-bounds in-flight work; reset invalidates stale conversion callbacks.
-
-The upstream hardware-decoder `power_efficient` metadata invariant is retained:
-setting it false crashes this revision's Mojo decoder service. It does not measure
-the additional energy used by enhancement.
-
-Protected video, software decoder paths, HDR enhancement, automatic backend
-selection and per-tab switching are outside this implementation. No separate
-model download, canvas extraction, frame upload server or CPU pixel readback is
-used by the browser enhancement pipeline.
+Set `CHROMIUM_BINARY` to an installed app executable to validate a release.
+The browser suite checks hidden controls, live changes during playback, two
+players, master bypass, seek/EOS, persistence, legacy migration, and GPU recovery.
+It can exercise hidden controls programmatically to retain pipeline coverage.
+The GPU sandbox remains enabled. Browser artifacts are written under
+`chromium-work/video-effects-validation/` (with `-headed` for headed runs).

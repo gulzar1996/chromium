@@ -1453,6 +1453,9 @@ source_set("core") {
     "//ui/webui/resources/cr_components/color_change_listener:mojom",
     "//ui/webui/tracked_element",
   ]
+  if (is_mac) {
+    deps += [ "//chrome/browser/ui/webui/video_effects" ]
+  }
 
   if (enable_webui_ntp) {
     deps += [

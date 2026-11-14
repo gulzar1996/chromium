@@ -6,6 +6,7 @@
 
 #include <CoreMedia/CoreMedia.h>
 #include <CoreVideo/CoreVideo.h>
+
 #include <memory>
 #include <string>
 #include <type_traits>
@@ -23,8 +24,10 @@ class MacVideoUpscaler {
   };
   explicit MacVideoUpscaler(std::string backend);
   ~MacVideoUpscaler();
+  bool Prepare(size_t width, size_t height, std::string& reason);
   Result Process(Buffer source, CMTime timestamp);
   static Buffer Retain(CVPixelBufferRef buffer);
+
  private:
   struct Impl;
   std::unique_ptr<Impl> impl_;

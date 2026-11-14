@@ -208,6 +208,44 @@ void ChromeFeatureListCreator::CreatePrefService() {
 }
 
 void ChromeFeatureListCreator::ConvertFlagsToSwitches() {
+#if BUILDFLAG(IS_MAC)
+  // FlagsState removes unknown experiments below. Migrate the retired video
+  // flag before that cleanup, and only when live settings have never existed.
+  if (local_state_->GetDict("video_effects.settings").empty()) {
+    int upscaling = -1;
+    for (const auto& value :
+         local_state_->GetList("browser.enabled_labs_experiments")) {
+      if (!value.is_string()) {
+        continue;
+      }
+      if (value.GetString() == "mac-video-upscaler@1") {
+        upscaling = 1;
+      }
+      if (value.GetString() == "mac-video-upscaler@2") {
+        upscaling = 2;
+      }
+    }
+    if (upscaling >= 0) {
+      const auto mode =
+          base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+              "mac-video-upscaler");
+      if (mode == "off") {
+        upscaling = 0;
+      }
+      if (mode == "videotoolbox") {
+        upscaling = 1;
+      }
+      if (mode == "metalfx") {
+        upscaling = 2;
+      }
+      base::DictValue settings;
+      settings.Set("enabled", upscaling != 0);
+      settings.Set("upscaling", upscaling);
+      local_state_->SetDict("video_effects.settings", std::move(settings));
+    }
+  }
+#endif
+
   // Convert active flags into switches. This needs to be done before
   // ui::ResourceBundle::InitSharedInstanceWithLocale as some loaded resources
   // are affected by experiment flags (--touch-optimized-ui in particular).

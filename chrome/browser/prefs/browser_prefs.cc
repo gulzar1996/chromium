@@ -1782,6 +1782,9 @@ std::string GetCountry() {
 }
 
 void RegisterLocalState(PrefRegistrySimple* registry) {
+#if BUILDFLAG(IS_MAC)
+  registry->RegisterDictionaryPref("video_effects.settings");
+#endif
   // Call outs to individual subsystems that register Local State (browser-wide)
   // prefs en masse. See RegisterProfilePrefs for per-profile prefs. Please
   // keep this list alphabetized.
