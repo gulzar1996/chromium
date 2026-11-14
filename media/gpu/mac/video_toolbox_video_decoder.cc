@@ -12,6 +12,8 @@
 
 #include "base/apple/scoped_cftyperef.h"
 #include "base/feature_list.h"
+#include "base/command_line.h"
+#include "base/task/thread_pool.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
@@ -122,6 +124,18 @@ void VideoToolboxVideoDecoder::Initialize(const VideoDecoderConfig& config,
                                           const WaitingCB& waiting_cb) {
   DVLOG(1) << __func__;
   DCHECK(decode_cbs_.empty());
+#if BUILDFLAG(IS_MAC)
+  if (upscaler_.is_null()) {
+    const auto mode = base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+        "mac-video-upscaler");
+    if (mode == "videotoolbox" || mode == "metalfx") {
+      upscaler_ = base::SequenceBound<MacVideoUpscaler>(
+          base::ThreadPool::CreateSequencedTaskRunner(
+              {base::MayBlock(), base::TaskPriority::USER_VISIBLE}), mode);
+      MEDIA_LOG(INFO, media_log_.get()) << "Mac video upscaler selected: " << mode;
+    }
+  }
+#endif
   DCHECK(config.IsValidConfig());
 
   if (has_error_) {
@@ -407,6 +421,42 @@ void VideoToolboxVideoDecoder::OnVideoToolboxOutput(
     return;
   }
 
+  ++num_conversions_;
+#if BUILDFLAG(IS_MAC)
+  if (!upscaler_.is_null() && !metadata->color_space.IsHDR()) {
+    const CMTime timestamp = CMTimeMake(metadata->timestamp.InMicroseconds(), 1000000);
+    // Keep the original intrinsic video dimensions. The enhanced texture can
+    // be larger without changing the page's video layout or aspect ratio.
+    metadata->upscaler_natural_size = metadata->aspect_ratio.GetNaturalSize(
+        gfx::Rect(CVImageBufferGetCleanRect(image.get())));
+    upscaler_.AsyncCall(&MacVideoUpscaler::Process)
+        .WithArgs(MacVideoUpscaler::Retain(image.get()), timestamp)
+        .Then(base::BindOnce(&VideoToolboxVideoDecoder::OnUpscalerOutput,
+                            converter_weak_this_factory_.GetWeakPtr(),
+                            std::move(metadata)));
+    return;
+  }
+#endif
+  ConvertImage(std::move(image), std::move(metadata));
+}
+
+#if BUILDFLAG(IS_MAC)
+void VideoToolboxVideoDecoder::OnUpscalerOutput(
+    std::unique_ptr<VideoToolboxDecodeMetadata> metadata,
+    MacVideoUpscaler::Result result) {
+  metadata->was_upscaled = result.enhanced;
+  if (!result.status.empty()) {
+    MEDIA_LOG(INFO, media_log_.get()) << "Mac video upscaler: " << result.status;
+  }
+  ConvertImage(base::apple::ScopedCFTypeRef<CVImageBufferRef>(
+                   result.buffer.get(), base::scoped_policy::RETAIN),
+               std::move(metadata));
+}
+#endif
+
+void VideoToolboxVideoDecoder::ConvertImage(
+    base::apple::ScopedCFTypeRef<CVImageBufferRef> image,
+    std::unique_ptr<VideoToolboxDecodeMetadata> metadata) {
   // Lazily create `converter_`.
   if (!converter_) {
     converter_ = base::MakeRefCounted<VideoToolboxFrameConverter>(
@@ -423,7 +473,6 @@ void VideoToolboxVideoDecoder::OnVideoToolboxOutput(
               base::BindOnce(&VideoToolboxVideoDecoder::OnConverterOutput,
                              converter_weak_this_factory_.GetWeakPtr()))));
 
-  ++num_conversions_;
 }
 
 void VideoToolboxVideoDecoder::OnVideoToolboxError(DecoderStatus status) {

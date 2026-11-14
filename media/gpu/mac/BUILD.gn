@@ -51,6 +51,9 @@ source_set("mac") {
       "video_toolbox_h265_accelerator.h",
     ]
   }
+  if (is_mac) {
+    sources += [ "mac_video_upscaler.h", "mac_video_upscaler.mm" ]
+  }
   public_deps = [ "//third_party/webrtc_overrides:webrtc_component" ]
   frameworks = [
     "CoreFoundation.framework",
@@ -60,6 +63,9 @@ source_set("mac") {
     "QuartzCore.framework",
     "VideoToolbox.framework",
   ]
+  if (is_mac) {
+    frameworks += [ "CoreGraphics.framework", "CoreImage.framework", "Metal.framework", "MetalFX.framework" ]
+  }
   deps = [
     "//base",
     "//components/crash/core/common:crash_key",

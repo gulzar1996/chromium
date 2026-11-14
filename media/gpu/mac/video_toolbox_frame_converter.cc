@@ -136,7 +136,8 @@ void VideoToolboxFrameConverter::Convert(
                              CVPixelBufferGetHeight(image.get()));
   const gfx::Rect visible_rect(CVImageBufferGetCleanRect(image.get()));
   const gfx::Size natural_size =
-      metadata->aspect_ratio.GetNaturalSize(visible_rect);
+      metadata->upscaler_natural_size.value_or(
+          metadata->aspect_ratio.GetNaturalSize(visible_rect));
 
   gfx::GpuMemoryBufferHandle handle(gfx::ScopedIOSurface(
       CVPixelBufferGetIOSurface(image.get()), base::scoped_policy::RETAIN));

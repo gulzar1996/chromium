@@ -20,6 +20,11 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
+#include "base/threading/sequence_bound.h"
+#include "build/build_config.h"
+#if BUILDFLAG(IS_MAC)
+#include "media/gpu/mac/mac_video_upscaler.h"
+#endif
 #include "gpu/config/gpu_driver_bug_workarounds.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/supported_video_decoder_config.h"
@@ -95,6 +100,14 @@ class MEDIA_GPU_EXPORT VideoToolboxVideoDecoder : public VideoDecoder {
       base::apple::ScopedCFTypeRef<CVImageBufferRef> image,
       std::unique_ptr<VideoToolboxDecodeMetadata> metadata);
   void OnVideoToolboxError(DecoderStatus status);
+
+#if BUILDFLAG(IS_MAC)
+  void OnUpscalerOutput(std::unique_ptr<VideoToolboxDecodeMetadata> metadata,
+                       MacVideoUpscaler::Result result);
+  base::SequenceBound<MacVideoUpscaler> upscaler_;
+#endif
+  void ConvertImage(base::apple::ScopedCFTypeRef<CVImageBufferRef> image,
+                    std::unique_ptr<VideoToolboxDecodeMetadata> metadata);
 
   // |converter_| callbacks.
   void OnConverterOutput(scoped_refptr<VideoFrame> frame,

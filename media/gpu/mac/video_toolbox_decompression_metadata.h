@@ -49,6 +49,8 @@ struct MEDIA_GPU_EXPORT VideoToolboxDecodeMetadata {
   VideoAspectRatio aspect_ratio;
   gfx::ColorSpace color_space;
   gfx::HDRMetadata hdr_metadata;
+  std::optional<gfx::Size> upscaler_natural_size;
+  bool was_upscaled = false;
 
   // The frame should be dropped after decoding. Used to implement Reset().
   bool discard = false;

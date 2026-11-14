@@ -1,0 +1,8 @@
+is_debug = false
+is_component_build = true
+symbol_level = 0
+target_cpu = "arm64"
+mac_min_system_version = "26.0"
+proprietary_codecs = true
+ffmpeg_branding = "Chrome"
+use_remoteexec = false

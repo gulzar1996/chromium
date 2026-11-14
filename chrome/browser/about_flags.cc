@@ -512,6 +512,14 @@ const FeatureEntry::FeatureVariation kUnthrottleAsyncTouchMovesVariations[] = {
     {"unthrottled always", kUnthrottleAsyncTouchMoves_UnthrottledAlways,
      nullptr}};
 
+#if BUILDFLAG(IS_MAC)
+const FeatureEntry::Choice kMacVideoUpscalerChoices[] = {
+    {"Off", "", ""},
+    {"VideoToolbox low-latency super resolution (2x)", "mac-video-upscaler", "videotoolbox"},
+    {"MetalFX spatial scaling (2x)", "mac-video-upscaler", "metalfx"},
+};
+#endif
+
 const FeatureEntry::Choice kEnableBenchmarkingChoices[] = {
     {flag_descriptions::kEnableBenchmarkingChoiceDisabled, "", ""},
     {flag_descriptions::kEnableBenchmarkingChoiceDefaultFeatureStates,
@@ -5272,6 +5280,14 @@ constexpr char kEnterpriseIsolatedModeInternalName[] =
 
 // When adding a new choice, add it to the end of the list.
 const FeatureEntry kFeatureEntries[] = {
+#if BUILDFLAG(IS_MAC)
+    {"mac-video-upscaler", "Mac video upscaler",
+     "Enhance supported SDR video decoded by VideoToolbox. Requires restart. "
+     "VideoToolbox requires macOS 26 and supported input dimensions; "
+     "MetalFX supports inputs up to 1080p. Unsupported frames play normally. "
+     "See chrome://media-internals for status.",
+     kOsMac, MULTI_VALUE_TYPE(kMacVideoUpscalerChoices)},
+#endif
 // Include generated flags for flag unexpiry; see //docs/flag_expiry.md and
 // //tools/flags/generate_unexpire_flags.py.
 #include "build/chromeos_buildflags.h"
