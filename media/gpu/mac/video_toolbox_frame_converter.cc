@@ -135,8 +135,8 @@ void VideoToolboxFrameConverter::Convert(
   const gfx::Size coded_size(CVPixelBufferGetWidth(image.get()),
                              CVPixelBufferGetHeight(image.get()));
   const gfx::Rect visible_rect(CVImageBufferGetCleanRect(image.get()));
-  const gfx::Size natural_size =
-      metadata->aspect_ratio.GetNaturalSize(visible_rect);
+  const gfx::Size natural_size = metadata->upscaler_natural_size.value_or(
+      metadata->aspect_ratio.GetNaturalSize(visible_rect));
 
   gfx::GpuMemoryBufferHandle handle(gfx::ScopedIOSurface(
       CVPixelBufferGetIOSurface(image.get()), base::scoped_policy::RETAIN));
@@ -172,7 +172,12 @@ void VideoToolboxFrameConverter::Convert(
     shared_image_usage |= gpu::SHARED_IMAGE_USAGE_WEBGPU_READ;
   }
 
-  gfx::ColorSpace color_space = GetImageBufferColorSpace(image.get());
+  // Native RGB stages render into an explicitly tagged sRGB destination.
+  // YUV matrix fallback must never be applied to these RGB IOSurfaces.
+  gfx::ColorSpace color_space =
+      metadata->was_upscaled && pixel_format == kCVPixelFormatType_32BGRA
+          ? gfx::ColorSpace::CreateSRGB()
+          : GetImageBufferColorSpace(image.get());
   if (!color_space.IsValid()) {
     // Chrome and macOS do not agree on the color space; force compositing to
     // ensure a consistent result. See crbug.com/343014700.
@@ -191,7 +196,6 @@ void VideoToolboxFrameConverter::Convert(
     std::move(output_cb).Run(nullptr, std::move(metadata));
     return;
   }
-
 
   // |image| must be retained until after the release sync token passes.
   VideoFrame::ReleaseMailboxCB release_cb = base::BindPostTask(

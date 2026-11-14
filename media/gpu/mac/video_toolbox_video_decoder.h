@@ -20,6 +20,11 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
+#if BUILDFLAG(IS_MAC)
+#include "media/gpu/mac/mac_video_effects_pipeline.h"
+#include "media/gpu/mac/mac_video_presentation_queue.h"
+#endif
 #include "gpu/config/gpu_driver_bug_workarounds.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/supported_video_decoder_config.h"
@@ -95,6 +100,32 @@ class MEDIA_GPU_EXPORT VideoToolboxVideoDecoder : public VideoDecoder {
       base::apple::ScopedCFTypeRef<CVImageBufferRef> image,
       std::unique_ptr<VideoToolboxDecodeMetadata> metadata);
   void OnVideoToolboxError(DecoderStatus status);
+
+#if BUILDFLAG(IS_MAC)
+  struct Source {
+    base::apple::ScopedCFTypeRef<CVImageBufferRef> image;
+    std::unique_ptr<VideoToolboxDecodeMetadata> metadata;
+  };
+  struct Completed {
+    std::unique_ptr<VideoToolboxDecodeMetadata> metadata;
+    MacVideoProcessor::Batch batch;
+  };
+  void DrainPresentationOrder();
+  void OnEffectsOutput(uint64_t serial,
+                       std::unique_ptr<VideoToolboxDecodeMetadata> metadata,
+                       MacVideoProcessor::Batch batch);
+  void MaybeFinishEffectsFlush();
+  std::unique_ptr<MacVideoEffectsPipeline> effects_;
+  MacVideoPresentationQueue<scoped_refptr<CodecPicture>, Source>
+      presentation_order_;
+  base::flat_map<uint64_t, Completed> completed_effects_;
+  uint64_t submitted_serial_ = 0, completed_serial_ = 0;
+  size_t num_effects_ = 0;
+  std::string effects_status_;
+  DecodeCB effects_flush_cb_;
+#endif
+  void ConvertImage(base::apple::ScopedCFTypeRef<CVImageBufferRef> image,
+                    std::unique_ptr<VideoToolboxDecodeMetadata> metadata);
 
   // |converter_| callbacks.
   void OnConverterOutput(scoped_refptr<VideoFrame> frame,

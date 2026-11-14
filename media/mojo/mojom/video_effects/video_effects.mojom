@@ -1,0 +1,49 @@
+module video_effects.mojom;
+import "sandbox/policy/mojom/sandbox.mojom";
+
+enum Upscaling { kOff, kVideoToolbox, kMetalFX };
+enum Motion { kOff, kLowLatency, kQuality };
+enum Cadence { kDouble, k60, k120 };
+struct Settings {
+  uint64 version;
+  bool enabled;
+  Upscaling upscaling;
+  Motion motion;
+  Cadence cadence;
+  bool noise;
+  double strength = 0.5;
+  uint64 retry;
+};
+struct Player {
+  uint64 id;
+  uint64 applied_version;
+  uint32 input_width;
+  uint32 input_height;
+  uint32 output_width;
+  uint32 output_height;
+  double source_fps;
+  double processed_fps;
+  double processing_ms;
+  uint32 queue_depth;
+  string state;
+  string reason;
+  string active;
+};
+struct Snapshot {
+  Settings settings;
+  uint64 acknowledged_version;
+  bool gpu_connected;
+  array<Player> players;
+};
+// Browser-only interface, bound through BindInterfaceInGpuProcess.
+[ServiceSandbox=sandbox.mojom.Sandbox.kGpu]
+interface GpuService {
+  Apply(Settings settings) => (uint64 acknowledged_version);
+  GetPlayers() => (array<Player> players);
+};
+// Trusted chrome://video-effects only.
+interface PageHandler {
+  GetSnapshot() => (Snapshot snapshot);
+  SetSettings(Settings settings) => (uint64 version);
+  Retry() => (uint64 version);
+};

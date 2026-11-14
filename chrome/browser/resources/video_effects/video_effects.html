@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Video effects</title>
+<link rel="stylesheet" href="video_effects.css"></head>
+<body><main><h1>Video effects</h1>
+<p>Changes apply to supported players in every tab. Keep this page open beside your video.</p>
+<section aria-labelledby="controls-heading"><h2 id="controls-heading">Live controls</h2>
+<label class="master"><input type="checkbox" id="enabled"> Enable effects <span>(off bypasses all)</span></label>
+<label>Upscaling <select id="upscaling"><option value="0">Off</option><option value="1">VideoToolbox low-latency 2×</option><option value="2">MetalFX 2×</option></select></label>
+<!-- Keep temporal controls connected to saved settings while hiding their UI. -->
+<div hidden>
+<label>Motion processing <select id="motion"><option value="0">Off</option><option value="1">Low-latency interpolation</option><option value="2">Quality frame-rate conversion</option></select></label>
+<label>Output frame rate <select id="cadence"><option value="0">2× source</option><option value="1">60 FPS</option><option value="2">120 FPS</option></select></label>
+<label><input type="checkbox" id="noise"> Temporal noise filtering</label>
+<label>Noise filtering strength <input type="range" id="strength" min="0" max="100" value="50"><output id="strength-value">50%</output></label>
+</div>
+<button id="retry">Retry bypassed effects</button><p id="ack" role="status" aria-live="polite">Connecting…</p>
+</section>
+<section><h2>Players</h2><p>Processing statistics describe decoded and processed frames, not display presentation. Source FPS is measured from source timestamps; processed FPS is worker output per second. Your display may present fewer frames.</p>
+<p id="requested"></p><div id="players"></div></section>
+<p class="scope">Supports uncropped, even-sized, 8-bit SDR video up to 1080p decoded through VideoToolbox. Software decoding, protected video and HDR enhancement are outside this scope.</p>
+</main><script type="module" src="video_effects.js"></script></body></html>

@@ -477,6 +477,9 @@ group("dev_ui_resources") {
     "//content/browser/resources/service_worker:resources",
     "//content/browser/webrtc/resources",
   ]
+  if (is_mac) {
+    public_deps += [ "video_effects:resources" ]
+  }
 
   if (enable_vr) {
     public_deps += [ "//content/browser/resources/webxr_internals:resources" ]
@@ -566,6 +569,9 @@ repack("dev_ui_paks") {
     "$root_gen_dir/content/quota_internals_resources.pak",
     "$root_gen_dir/content/service_worker_resources.pak",
   ]
+  if (is_mac) {
+    sources += [ "$root_gen_dir/chrome/video_effects_resources.pak" ]
+  }
 
   if (enable_vr) {
     sources += [ "$root_gen_dir/content/webxr_internals_resources.pak" ]

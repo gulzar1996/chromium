@@ -1,0 +1,7 @@
+import("//mojo/public/tools/bindings/mojom.gni")
+
+mojom("mojom") {
+  sources = [ "video_effects.mojom" ]
+  deps = [ "//sandbox/policy/mojom" ]
+  webui_module_path = "/"
+}

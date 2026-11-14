@@ -2,11 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/ui/webui/chrome_web_ui_configs.h"
+#include "build/build_config.h"
+#if BUILDFLAG(IS_MAC)
+#include "chrome/browser/ui/webui/video_effects/video_effects_ui.h"
+#endif
 
 #include "build/android_buildflags.h"
 #include "build/branding_buildflags.h"
-#include "build/build_config.h"
 #include "chrome/browser/browser_actuator/internals/browser_actuator_internals_ui.h"
 #include "chrome/browser/contextual_tasks/contextual_tasks_ui.h"
 #include "chrome/browser/glic/experimental_opt_in/glic_experimental_opt_in_ui.h"
@@ -19,6 +21,7 @@
 #include "chrome/browser/ui/webui/autofill_and_password_manager_internals/password_manager_internals_ui.h"
 #include "chrome/browser/ui/webui/bluetooth_internals/bluetooth_internals_ui.h"
 #include "chrome/browser/ui/webui/chrome_urls/chrome_urls_ui.h"
+#include "chrome/browser/ui/webui/chrome_web_ui_configs.h"
 #include "chrome/browser/ui/webui/commerce/commerce_internals_ui_config.h"
 #include "chrome/browser/ui/webui/components/components_ui.h"
 #include "chrome/browser/ui/webui/connectors_internals/connectors_internals_ui.h"
@@ -331,6 +334,9 @@ void RegisterChromeWebUIConfigs() {
   map.AddWebUIConfig(std::make_unique<SuggestInternalsUIConfig>());
   map.AddWebUIConfig(std::make_unique<SyncInternalsUIConfig>());
   map.AddWebUIConfig(std::make_unique<TranslateInternalsUIConfig>());
+#if BUILDFLAG(IS_MAC)
+  map.AddWebUIConfig(std::make_unique<VideoEffectsUIConfig>());
+#endif
   map.AddWebUIConfig(std::make_unique<UsbInternalsUIConfig>());
   map.AddWebUIConfig(std::make_unique<user_actions_ui::UserActionsUIConfig>());
   map.AddWebUIConfig(std::make_unique<VersionUIConfig>());

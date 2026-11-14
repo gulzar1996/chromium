@@ -106,7 +106,11 @@ bool VideoToolboxVideoDecoder::NeedsBitstreamConversion() const {
 int VideoToolboxVideoDecoder::GetMaxDecodeRequests() const {
   DVLOG(4) << __func__;
   // This is kMaxVideoFrames, and it seems to have worked okay so far.
+#if BUILDFLAG(IS_MAC)
+  return 3;  // One effects job plus two queued source intervals.
+#else
   return 4;
+#endif
 }
 
 VideoDecoderType VideoToolboxVideoDecoder::GetDecoderType() const {
@@ -122,6 +126,11 @@ void VideoToolboxVideoDecoder::Initialize(const VideoDecoderConfig& config,
                                           const WaitingCB& waiting_cb) {
   DVLOG(1) << __func__;
   DCHECK(decode_cbs_.empty());
+#if BUILDFLAG(IS_MAC)
+  if (!effects_) {
+    effects_ = std::make_unique<MacVideoEffectsPipeline>();
+  }
+#endif
   DCHECK(config.IsValidConfig());
 
   if (has_error_) {
@@ -249,7 +258,12 @@ void VideoToolboxVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
     }
     // Must be called after `accelerator_->Flush()` so that all outputs will
     // have been scheduled already.
+#if BUILDFLAG(IS_MAC)
+    effects_flush_cb_ = std::move(decode_cb);
+    MaybeFinishEffectsFlush();
+#else
     output_queue_.Flush(std::move(decode_cb));
+#endif
     return;
   }
 
@@ -318,6 +332,19 @@ void VideoToolboxVideoDecoder::ResetInternal(DecoderStatus status) {
   }
   video_toolbox_.Reset();
   output_queue_.Reset(status);
+#if BUILDFLAG(IS_MAC)
+  if (effects_) {
+    effects_->Reset();
+  }
+  presentation_order_.Clear();
+  completed_effects_.clear();
+  submitted_serial_ = completed_serial_ = 0;
+  num_effects_ = 0;
+  if (effects_flush_cb_) {
+    task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(std::move(effects_flush_cb_), status));
+  }
+#endif
 
   // Drop in-flight conversions.
   converter_weak_this_factory_.InvalidateWeakPtrs();
@@ -328,7 +355,15 @@ void VideoToolboxVideoDecoder::ReleaseDecodeCallbacks() {
   DVLOG(4) << __func__;
   DCHECK(!has_error_);
 
-  while (decode_cbs_.size() > video_toolbox_.NumDecodes() + num_conversions_) {
+  // Reorder buffers cannot hold decode callbacks: the next decoded picture
+  // may be required to release them. Count completed sources independently of
+  // generated output frames, which must not amplify decoder backpressure.
+#if BUILDFLAG(IS_MAC)
+  size_t pending = video_toolbox_.NumDecodes() + num_effects_;
+#else
+  size_t pending = video_toolbox_.NumDecodes() + num_conversions_;
+#endif
+  while (decode_cbs_.size() > pending) {
     task_runner_->PostTask(FROM_HERE,
                            base::BindOnce(std::move(decode_cbs_.front()),
                                           DecoderStatus::Codes::kOk));
@@ -388,7 +423,12 @@ void VideoToolboxVideoDecoder::OnAcceleratorDecode(
 void VideoToolboxVideoDecoder::OnAcceleratorOutput(
     scoped_refptr<CodecPicture> picture) {
   DVLOG(3) << __func__;
+#if BUILDFLAG(IS_MAC)
+  presentation_order_.Schedule(std::move(picture));
+  DrainPresentationOrder();
+#else
   output_queue_.SchedulePicture(std::move(picture));
+#endif
 }
 
 void VideoToolboxVideoDecoder::OnVideoToolboxOutput(
@@ -400,13 +440,132 @@ void VideoToolboxVideoDecoder::OnVideoToolboxOutput(
     return;
   }
 
-  // Check if the frame was dropped.
-  // TODO(crbug.com/40227557): Notify the output queue of dropped frames.
+#if BUILDFLAG(IS_MAC)
+  // Preserve the codec accelerator's presentation order before temporal work.
+  // Fulfilled null images still consume their scheduled picture (dropped
+  // frame).
+  auto picture = metadata->picture;
+  presentation_order_.Fulfill(std::move(picture),
+                              Source{std::move(image), std::move(metadata)});
+  DrainPresentationOrder();
+  ReleaseDecodeCallbacks();
+  MaybeFinishEffectsFlush();
+#else
   if (!image) {
     ReleaseDecodeCallbacks();
     return;
   }
+  ++num_conversions_;
+  ConvertImage(std::move(image), std::move(metadata));
+#endif
+}
 
+#if BUILDFLAG(IS_MAC)
+void VideoToolboxVideoDecoder::DrainPresentationOrder() {
+  while (auto next = presentation_order_.Pop()) {
+    Source source = std::move(*next);
+    if (!source.image) {
+      continue;
+    }
+    source.metadata->upscaler_natural_size =
+        source.metadata->aspect_ratio.GetNaturalSize(
+            gfx::Rect(CVImageBufferGetCleanRect(source.image.get())));
+    ++num_effects_;
+    uint64_t serial = submitted_serial_++;
+    CMTime time =
+        source.metadata->timestamp == kNoTimestamp
+            ? kCMTimeInvalid
+            : CMTimeMake(source.metadata->timestamp.InMicroseconds(), 1000000);
+    effects_->Submit(MacVideoUpscaler::Retain(source.image.get()), time,
+                     !source.metadata->color_space.IsHDR(),
+                     base::BindOnce(&VideoToolboxVideoDecoder::OnEffectsOutput,
+                                    converter_weak_this_factory_.GetWeakPtr(),
+                                    serial, std::move(source.metadata)));
+  }
+}
+
+void VideoToolboxVideoDecoder::OnEffectsOutput(
+    uint64_t serial,
+    std::unique_ptr<VideoToolboxDecodeMetadata> metadata,
+    MacVideoProcessor::Batch batch) {
+  std::string status = batch.state + ": " + batch.active + " " + batch.reason;
+  if (status != effects_status_) {
+    effects_status_ = status;
+    MEDIA_LOG(INFO, media_log_.get()) << "Mac video effects: " << status;
+  }
+  CHECK_GT(num_effects_, 0u);
+  --num_effects_;
+  completed_effects_.emplace(serial,
+                             Completed{std::move(metadata), std::move(batch)});
+  // Overload may bypass a newer interval before an older worker returns.
+  // Schedule all resulting frames in source interval order, never completion
+  // order.
+  for (;;) {
+    auto it = completed_effects_.find(completed_serial_);
+    if (it == completed_effects_.end()) {
+      break;
+    }
+    Completed completed = std::move(it->second);
+    completed_effects_.erase(it);
+    ++completed_serial_;
+    for (const auto& output : completed.batch.frames) {
+      auto out_metadata =
+          std::make_unique<VideoToolboxDecodeMetadata>(*completed.metadata);
+      out_metadata->picture = base::MakeRefCounted<CodecPicture>();
+      if (CMTIME_IS_NUMERIC(output.timestamp)) {
+        out_metadata->timestamp = base::Microseconds(
+            CMTimeConvertScale(output.timestamp, 1000000,
+                               kCMTimeRoundingMethod_RoundHalfAwayFromZero)
+                .value);
+      }
+      if (CMTIME_IS_NUMERIC(output.duration)) {
+        out_metadata->duration = base::Microseconds(
+            CMTimeConvertScale(output.duration, 1000000,
+                               kCMTimeRoundingMethod_RoundHalfAwayFromZero)
+                .value);
+      }
+      // Preserve the source interval's end, including EOS, on the batch's
+      // final output. The following batch's PTS supersedes this hold during
+      // ordinary playback; no synthetic future motion is required at EOF.
+      if (&output == &completed.batch.frames.back() &&
+          completed.metadata->duration != kNoTimestamp &&
+          completed.metadata->timestamp != kNoTimestamp &&
+          out_metadata->timestamp <= completed.metadata->timestamp) {
+        out_metadata->duration =
+            completed.metadata->duration +
+            (completed.metadata->timestamp - out_metadata->timestamp);
+      }
+      out_metadata->was_upscaled = output.enhanced;
+      output_queue_.SchedulePicture(out_metadata->picture);
+      ++num_conversions_;
+      ConvertImage(base::apple::ScopedCFTypeRef<CVImageBufferRef>(
+                       output.buffer.get(), base::scoped_policy::RETAIN),
+                   std::move(out_metadata));
+    }
+  }
+  ReleaseDecodeCallbacks();
+  MaybeFinishEffectsFlush();
+}
+
+void VideoToolboxVideoDecoder::MaybeFinishEffectsFlush() {
+  if (!effects_flush_cb_ || video_toolbox_.NumDecodes() || num_effects_ ||
+      num_conversions_ || !presentation_order_.empty() ||
+      !completed_effects_.empty()) {
+    return;
+  }
+  // Temporal output never extends beyond the last known source timestamp.
+  // The final original has already been emitted in 2x mode. Fixed-rate mode
+  // emits only grid frames; it must not append an off-grid final original.
+  effects_->Reset();
+  presentation_order_.Clear();
+  ReleaseDecodeCallbacks();
+  output_queue_.Flush(std::move(effects_flush_cb_));
+}
+#endif
+
+void VideoToolboxVideoDecoder::ConvertImage(
+    base::apple::ScopedCFTypeRef<CVImageBufferRef> image,
+    std::unique_ptr<VideoToolboxDecodeMetadata> metadata) {
   // Lazily create `converter_`.
   if (!converter_) {
     converter_ = base::MakeRefCounted<VideoToolboxFrameConverter>(
@@ -422,8 +581,6 @@ void VideoToolboxVideoDecoder::OnVideoToolboxOutput(
               task_runner_,
               base::BindOnce(&VideoToolboxVideoDecoder::OnConverterOutput,
                              converter_weak_this_factory_.GetWeakPtr()))));
-
-  ++num_conversions_;
 }
 
 void VideoToolboxVideoDecoder::OnVideoToolboxError(DecoderStatus status) {
@@ -458,6 +615,9 @@ void VideoToolboxVideoDecoder::OnConverterOutput(
   ReleaseDecodeCallbacks();
 
   output_queue_.FulfillPicture(std::move(metadata->picture), std::move(frame));
+#if BUILDFLAG(IS_MAC)
+  MaybeFinishEffectsFlush();
+#endif
 }
 
 // static

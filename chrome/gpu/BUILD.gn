@@ -28,6 +28,12 @@ static_library("gpu") {
     "chrome_content_gpu_client.h",
   ]
 
+  if (is_mac) {
+    deps += [
+      "//media/gpu",
+      "//media/mojo/mojom/video_effects:mojom",
+    ]
+  }
   if (is_chromeos) {
     deps += [
       "//chromeos/ash/experiences/arc/mojom:media",

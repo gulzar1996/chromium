@@ -51,7 +51,26 @@ source_set("mac") {
       "video_toolbox_h265_accelerator.h",
     ]
   }
+  if (is_mac) {
+    sources += [
+      "mac_video_cadence.cc",
+      "mac_video_effects_pipeline.cc",
+      "mac_video_effects_pipeline.h",
+      "mac_video_effects_service.cc",
+      "mac_video_effects_service.h",
+      "mac_video_processor.h",
+      "mac_video_processor.mm",
+      "mac_video_upscaler.h",
+      "mac_video_upscaler.mm",
+    ]
+  }
   public_deps = [ "//third_party/webrtc_overrides:webrtc_component" ]
+  if (is_mac) {
+    public_deps += [
+      "//media/mojo/mojom/video_effects:mojom",
+      "//mojo/public/cpp/bindings",
+    ]
+  }
   frameworks = [
     "CoreFoundation.framework",
     "CoreMedia.framework",
@@ -60,6 +79,14 @@ source_set("mac") {
     "QuartzCore.framework",
     "VideoToolbox.framework",
   ]
+  if (is_mac) {
+    frameworks += [
+      "CoreGraphics.framework",
+      "CoreImage.framework",
+      "Metal.framework",
+      "MetalFX.framework",
+    ]
+  }
   deps = [
     "//base",
     "//components/crash/core/common:crash_key",

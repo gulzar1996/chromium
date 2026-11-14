@@ -1810,6 +1810,10 @@
     "includes": [10140],
   },
 
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/video_effects/resources.grd": {
+    "META": {"sizes": {"includes": [20]}},
+    "includes": [11900],
+  },
   "<(SHARED_INTERMEDIATE_DIR)/THIS_IS_A_PLACEHOLDER.grd": {
     "META": {"sizes": {"includes": [800]}},
     "includes": [12000],

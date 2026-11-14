@@ -49,6 +49,22 @@
     (allow mach-lookup (global-name "com.apple.trustd.agent"))
     (allow file-read* (path "/Library/Preferences/com.apple.security.plist"))
 
+; macOS 26 VideoToolbox temporal effects. Noise filtering queries the video
+; engine, and interpolation/conversion use IOSurfaceAccelerator for their
+; internal buffers. Keep the GPU sandbox enabled and allow only these clients.
+(if (>= os-version 2600)
+  (allow iokit-open
+    (iokit-user-client-class "AppleAVE2UserClient")
+    (iokit-user-client-class "IOSurfaceAcceleratorClient")))
+
+; The low-latency interpolation ANE compiler uses a temporary directory named
+; with three hexadecimal model hashes. Do not grant access to the entire user
+; temp directory (WebNN intentionally restricts it when compilation is isolated).
+(if (>= os-version 2600)
+  (allow file-read* file-write*
+    (regex (string-append "^" (regex-quote (param darwin-user-temp-dir))
+                         "/[A-F0-9]+_[A-F0-9]+_[A-F0-9]+(/|$)"))))
+
 ; Needed for WebGL - https://crbug.com/75343
 (allow iokit-open
   (iokit-connection "IOAccelerator")

@@ -2,12 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/chrome_browser_interface_binders_webui.h"
+#include "build/build_config.h"
+#if BUILDFLAG(IS_MAC)
+#include "chrome/browser/ui/webui/video_effects/video_effects_ui.h"
+#endif
 
 #include "build/android_buildflags.h"
 #include "chrome/browser/browser_actuator/internals/browser_actuator_internals.mojom.h"
 #include "chrome/browser/browser_actuator/internals/browser_actuator_internals_ui.h"
 #include "chrome/browser/chrome_browser_interface_binders.h"
+#include "chrome/browser/chrome_browser_interface_binders_webui.h"
 #include "chrome/browser/chrome_browser_interface_binders_webui_parts.h"
 #include "chrome/browser/contextual_tasks/contextual_tasks_internals.mojom.h"
 #include "chrome/browser/contextual_tasks/contextual_tasks_toolbar.mojom.h"
@@ -65,10 +69,10 @@
 #include "chrome/browser/ui/webui/critical_actions/critical_actions_ui.h"
 #include "chrome/browser/ui/webui/indigo_internals/indigo_internals.mojom.h"
 #include "chrome/browser/ui/webui/indigo_internals/indigo_internals_ui.h"
+#include "chrome/browser/ui/webui/omnibox_everywhere/omnibox_everywhere_ui.h"
 #include "chrome/browser/ui/webui/omnibox_popup/mojom/omnibox_popup.mojom.h"
 #include "chrome/browser/ui/webui/omnibox_popup/mojom/omnibox_popup_aim.mojom.h"
 #include "chrome/browser/ui/webui/omnibox_popup/omnibox_popup_ui.h"
-#include "chrome/browser/ui/webui/omnibox_everywhere/omnibox_everywhere_ui.h"
 #include "chrome/browser/ui/webui/password_manager/password_manager_ui.h"
 #include "chrome/browser/ui/webui/side_panel/reading_list/reading_list_ui.h"
 #include "chrome/browser/ui/webui/user_education_internals/user_education_internals_ui.h"
@@ -238,6 +242,10 @@ void PopulateChromeWebUIFrameBindersPartsAllPlatforms(
       site_engagement::mojom::SiteEngagementDetailsProvider, SiteEngagementUI>(
       map);
 
+#if BUILDFLAG(IS_MAC)
+  RegisterWebUIControllerInterfaceBinder<video_effects::mojom::PageHandler,
+                                         VideoEffectsUI>(map);
+#endif
   RegisterWebUIControllerInterfaceBinder<::mojom::UsbInternalsPageHandler,
                                          UsbInternalsUI>(map);
 

@@ -2,7 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/chrome_browser_main.h"
+#include "build/build_config.h"
+#if BUILDFLAG(IS_MAC)
+#include "chrome/browser/ui/webui/video_effects/video_effects_service.h"
+#endif
 
 #include <memory>
 #include <string>
@@ -29,12 +32,12 @@
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
 #include "build/branding_buildflags.h"
-#include "build/build_config.h"
 #include "chrome/browser/active_use_util.h"
 #include "chrome/browser/after_startup_task_utils.h"
 #include "chrome/browser/browser_features.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_impl.h"
+#include "chrome/browser/chrome_browser_main.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
 #include "chrome/browser/component_updater/registration.h"
 #include "chrome/browser/enterprise/browser_management/management_service_factory.h"
@@ -1027,8 +1030,6 @@ void ChromeBrowserMainParts::RecordBrowserStartupTime() {
 // -----------------------------------------------------------------------------
 // TODO(viettrungluu): move more/rest of BrowserMain() into BrowserMainParts.
 
-
-
 // content::BrowserMainParts implementation ------------------------------------
 
 int ChromeBrowserMainParts::PreEarlyInitialization() {
@@ -1764,6 +1765,9 @@ void ChromeBrowserMainParts::PreBrowserStart() {
 }
 
 void ChromeBrowserMainParts::PostBrowserStart() {
+#if BUILDFLAG(IS_MAC)
+  VideoEffectsService::Get().Start();
+#endif
   TRACE_EVENT0("startup", "ChromeBrowserMainParts::PostBrowserStart");
   for (auto& chrome_extra_part : chrome_extra_parts_) {
     chrome_extra_part->PostBrowserStart();
@@ -2265,6 +2269,9 @@ void ChromeBrowserMainParts::OnFirstIdle() {
 }
 
 void ChromeBrowserMainParts::PostMainMessageLoopRun() {
+#if BUILDFLAG(IS_MAC)
+  VideoEffectsService::Get().Shutdown();
+#endif
   TRACE_EVENT_END("toplevel", perfetto::Track::FromPointer(this));
   TRACE_EVENT0("startup", "ChromeBrowserMainParts::PostMainMessageLoopRun");
 #if BUILDFLAG(IS_ANDROID)
